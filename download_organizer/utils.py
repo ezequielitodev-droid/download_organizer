@@ -1,10 +1,42 @@
+import logging
 import os
 import shutil
 from pathlib import Path
 from dotenv import load_dotenv
 
+#Cargamos funciones de entorno:
 
 load_dotenv()
+
+#Configuramos los Logging:
+
+format = logging.Formatter(
+    fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+logger_move = logging.getLogger("mover")
+logger_move.setLevel(logging.INFO)
+
+fh_move = logging.FileHandler(f"{os.getenv("SAFE_MOVE_FILE_LOG")}", encoding="utf-8" )
+fh_move.setLevel(logging.INFO)
+
+fh_move.setFormatter(format)
+
+logger_move.addHandler(fh_move)
+
+
+
+logger_copy = logging.getLogger("copiar")
+logger_copy.setLevel(logging.INFO)
+
+fh_copy = logging.FileHandler(f"{os.getenv("SAFE_COPY_FILE_LOG")}", encoding="utf-8")
+fh_copy.setLevel(logging.INFO)
+
+fh_copy.setFormatter(format)
+
+logger_copy.addHandler(fh_copy)
+
 
 # Funciones para obtener los path's
 
@@ -204,64 +236,6 @@ def ensure_folder_exists(path: Path) -> None:
 
     path.mkdir(parents=True, exist_ok=True)
 
-def is_file(path: Path) -> bool:
-    
-    """
-    Check if the given path is a file.
-
-    Parameters
-    ----------
-    path : Path
-        The path to check.
-
-    Returns
-    -------
-    bool
-        True if the path exists and is a file, False otherwise.
-
-    Examples
-    --------
-    >>> from pathlib import Path
-    >>> test_file = Path("C:/Users/Ezequiel/test.txt")
-    >>> # Suppose test.txt exists
-    >>> is_file(test_file)
-    True
-    >>> test_folder = Path("C:/Users/Ezequiel/TestFolder")
-    >>> is_file(test_folder)
-    False
-    """
-
-    return path.is_file()
-
-def is_folder(path: Path) -> bool:
-
-    """
-    Check if the given path is a folder/directory.
-
-    Parameters
-    ----------
-    path : Path
-        The path to check.
-
-    Returns
-    -------
-    bool
-        True if the path exists and is a folder, False otherwise.
-
-    Examples
-    --------
-    >>> from pathlib import Path
-    >>> test_folder = Path("C:/Users/Ezequiel/TestFolder")
-    >>> # Suppose TestFolder exists
-    >>> is_folder(test_folder)
-    True
-    >>> test_file = Path("C:/Users/Ezequiel/test.txt")
-    >>> is_folder(test_file)
-    False
-    """
-
-    return path.is_dir()
-
 # Funciones de manipulacion de rutas:
 
 def join_path(base: Path, *sub_folders: str) -> Path:
@@ -450,91 +424,132 @@ def get_unique_filename(file: Path) -> Path:
 def safe_move_file(src: Path, dst: Path) -> None:
 
     """
-    Move a file safely to a destination path, avoiding overwriting existing files.
+    Safely move a file to a destination path while preventing accidental overwrites
+    and avoiding operations on directories.
+
+    This function moves a file from `src` to `dst`. If `dst` is a directory, the file
+    is placed inside it using its original filename. If a file with the same name
+    already exists at the destination, a unique filename is generated automatically
+    via `get_unique_filename()` to prevent overwriting.
+
+    Several safety checks are enforced:
+    - The source path must exist.
+    - The destination path must exist.
+    - The source must not be a directory. If it is, the operation is aborted.
+    - If the destination is a directory, the final target path becomes `dst/src.name`.
+
+    The move operation is handled by `shutil.move()`. Any issues such as missing paths
+    or unexpected errors are logged. Directory sources trigger a warning and are not moved.
 
     Parameters
     ----------
     src : Path
-        The source file path to move.
+        The source file path.
     dst : Path
-        The destination path or folder where the file will be moved.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the source file does not exist.
-    FileNotFoundError
-        If the destination folder does not exist.
+        The destination path or directory.
 
     Notes
     -----
-    If a file with the same name already exists at the destination,
-    a unique name is generated automatically (e.g., 'file(1).txt', 'file(2).txt', etc.).
-    The move operation is performed using `shutil.move()`.
+    - If `src` does not exist, a warning is logged and nothing is moved.
+    - If `dst` does not exist, the function logs a warning and stops.
+    - If `src` is a directory, an `IsADirectoryError` is raised and logged, and the
+      operation is aborted.
+    - Unique filenames are handled by `get_unique_filename()`.
+    - All warnings and errors are logged using `logger_move`.
 
     Examples
     --------
-    >>> from pathlib import Path
-    >>> safe_move_file(Path("C:/Users/Ezequiel/Downloads/photo.jpg"),
-    ...                Path("C:/Users/Ezequiel/Documents/"))
-    # Moves 'photo.jpg' into 'Documents', renaming if necessary.
+    >>> safe_move_file(Path("Downloads/photo.jpg"), Path("Documents/"))
+    # Moves 'photo.jpg' into Documents, generating a unique name if needed.
 
-    >>> safe_move_file(Path("C:/Users/Ezequiel/Downloads/photo.jpg"),
-    ...                Path("C:/Users/Ezequiel/Documents/photo.jpg"))
-    # If 'photo.jpg' already exists in Documents, it becomes 'photo(1).jpg'
+    >>> safe_move_file(Path("Downloads/photo.jpg"), Path("Documents/photo.jpg"))
+    # Moves to the exact file target, renaming if the file already exists.
     """
 
-    if not src.exists(): raise FileNotFoundError(f"Sorce does not exist: {src}")
 
-    if not dst.exists(): raise FileNotFoundError(f"Destination folder does not exist: {dst}")
+    try:
 
-    safe_dst = get_unique_filename(dst) if dst.exists() else dst
+        if not src.exists(): raise FileNotFoundError(f"Sorce does not exist: {src}")
 
-    shutil.move(src, safe_dst)
+        if not dst.exists(): raise FileNotFoundError(f"Destination folder does not exist: {dst}")
+
+        if src.is_dir(): raise IsADirectoryError(f"Source is a directory, not a file: {src}")
+
+        if dst.is_dir(): dst = dst / src.name
+
+        shutil.move(src, get_unique_filename(dst))
+
+        logger_move.info(f"File moved successfully: {src} -> {dst}")
+
+    except FileNotFoundError as e:
+        
+        logger_move.warning(f"Error moving file: {e}")
+    
+    except IsADirectoryError as e:
+
+        logger_move.warning("Source path is a directory. Operation aborted.")
+
+    except Exception as e:
+        
+        logger_move.error(f"An unexpected error occurred while moving file: {e}")
+
+
 
 def safe_copy_file(src: Path, dst: Path) -> None: 
     
     """
-    Copy a file safely to a destination path, avoiding overwriting existing files.
+    Copy a file safely to a destination path, ensuring no existing files are overwritten.
+
+    This function copies a file from `src` to `dst`. If `dst` is a folder, the file is
+    placed inside it with its original name. If a file with the same name already exists
+    in the destination, a unique name is generated automatically using `get_unique_filename()`.
+
+    The copy operation is performed using `shutil.copy2()`, which preserves metadata such as
+    modification time.
 
     Parameters
     ----------
     src : Path
-        The source file path to copy.
+        The source file to be copied.
     dst : Path
-        The destination path or folder where the file will be copied.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the source file does not exist.
-    FileNotFoundError
-        If the destination folder does not exist.
+        The destination file path or directory.
 
     Notes
     -----
-    If a file with the same name already exists at the destination,
-    a unique name is generated automatically (e.g., 'file(1).txt', 'file(2).txt', etc.).
-    The copy operation is performed using `shutil.copy2()`, preserving metadata.
+    - If `src` does not exist, the function logs a warning and stops.
+    - If `dst` does not exist, the function logs a warning and stops.
+    - If `dst` is a file path, the copied file will replace only the filename part.
+    - `get_unique_filename()` ensures the resulting file path is unique.
+    - All outcomes (success, warnings, errors) are written to the log.
 
     Examples
     --------
     >>> from pathlib import Path
     >>> safe_copy_file(Path("C:/Users/Ezequiel/Downloads/photo.jpg"),
     ...                Path("C:/Users/Ezequiel/Documents/"))
-    # Copies 'photo.jpg' into 'Documents', renaming if necessary.
+    # Copies 'photo.jpg' into the Documents folder, renaming if needed.
 
     >>> safe_copy_file(Path("C:/Users/Ezequiel/Downloads/photo.jpg"),
     ...                Path("C:/Users/Ezequiel/Documents/photo.jpg"))
-    # If 'photo.jpg' already exists in Documents, it becomes 'photo(1).jpg'
+    # Copies the file to an explicit path, generating a unique name if needed.
     """
     
-    if not src.exists():
-        raise FileNotFoundError(f"Source does not exist: {src}")
+    try:
+    
+        if not src.exists(): raise FileNotFoundError(f"Source does not exist: {src}")
+        
+        if not dst.exists(): raise FileNotFoundError(f"Destination folder does not exist: {dst}")
 
-    if not dst.exists():
-        raise FileNotFoundError(f"Destination folder does not exist: {dst}")
+        if dst.is_dir(): dst = dst / src.name
 
-    safe_dst = get_unique_filename(dst) if dst.exists() else dst
+        shutil.copy2(src, get_unique_filename(dst))
 
-    shutil.copy2(src, safe_dst)
+        logger_copy.info(f"File copied successfully: {src} -> {dst}")
+
+    except FileNotFoundError as e:
+
+        logger_copy.warning(f"File copy failed: {e}")
+
+    except Exception as e:
+
+        logger_copy.error(f"Unexpected error while copying file: {e}")
