@@ -1,4 +1,4 @@
-from utils import (
+from download_organizer.utils import (
     get_documents_path,
     get_pictures_path,
     get_audio_path,
@@ -74,6 +74,7 @@ extension_to_category = {
     ".apk": "executables",
     ".bat": "executables",
     ".sh": "executables",
+    ".spec": "executables",
 
     # Disk images
     ".iso": "disk_images",
@@ -88,7 +89,7 @@ category_to_path = {
     "video": get_video_path(), 
     "archives": get_archives_path(),
     "code": get_code_path(),
-    "exeutables": get_executables_path()
+    "executables": get_executables_path()
 }
 
 
