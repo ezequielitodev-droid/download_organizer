@@ -27,10 +27,24 @@ FILES_ORGANIZER/
 
 ## ⚙️ Requisitos
 
-- Python 3.8 o superior
-- Librerías en `requirements.txt`
+Tener en el computador Python 3.12.10, para arriba.
 
-Instalar dependencias:
+Se aconseja encarecidamente crear un entorno virtual:
+
+- Sobre la carpeta del proyecto, hacer:
+```bash
+python -m venv venv
+```
+- Luego activarlo:
+```bash
+.\venv\Scripts\Activate.ps1   # Windows PowerShell
+# o
+source venv/bin/activate       # Linux/Mac
+```
+
+
+
+- Instalar dependencias:
 ```bash
 pip install -r requirements.txt
 ```
